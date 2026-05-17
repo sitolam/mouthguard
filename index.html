@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mouth Closure Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0f14;
+      --surface: #161922;
+      --surface2: #1e2230;
+      --border: #2a2f3f;
+      --text: #e8eaf0;
+      --text-muted: #6b7280;
+      --text-dim: #9ca3af;
+      --green: #22c55e;
+      --green-dim: #15803d;
+      --red: #ef4444;
+      --red-dim: #991b1b;
+      --blue: #3b82f6;
+      --amber: #f59e0b;
+      --accent: #818cf8;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .logo-icon {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, var(--accent), var(--blue));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    button {
+      cursor: pointer;
+      border: none;
+      outline: none;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: var(--radius-sm);
+      padding: 8px 16px;
+      transition: all 0.15s;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover { background: #6366f1; }
+
+    .btn-danger {
+      background: var(--red);
+      color: #fff;
+    }
+    .btn-danger:hover { background: #dc2626; }
+
+    .btn-ghost {
+      background: var(--surface2);
+      color: var(--text-dim);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { background: var(--border); color: var(--text); }
+
+    .btn-icon {
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--surface2);
+      color: var(--text-dim);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+    .btn-icon:hover { background: var(--border); color: var(--text); }
+
+    .main {
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      height: calc(100vh - 61px);
+      overflow: hidden;
+    }
+
+    /* LEFT PANEL */
+    .left-panel {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+    }
+
+    .webcam-container {
+      position: relative;
+      background: #000;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    #videoEl {
+      width: 100%;
+      height: auto;
+      transform: scaleX(-1);
+      display: block;
+    }
+
+    #canvasOverlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+    }
+
+    .status-overlay {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .mouth-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(8px);
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid rgba(255,255,255,0.1);
+      transition: all 0.2s;
+    }
+
+    .mouth-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+
+    .mouth-badge.open .mouth-dot { background: var(--red); box-shadow: 0 0 8px var(--red); }
+    .mouth-badge.open { border-color: rgba(239,68,68,0.3); }
+    .mouth-badge.closed .mouth-dot { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .mouth-badge.closed { border-color: rgba(34,197,94,0.3); }
+
+    .session-timer {
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(8px);
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--text-dim);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .camera-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      height: 315px;
+      background: var(--surface);
+      color: var(--text-muted);
+    }
+
+    .camera-placeholder svg {
+      opacity: 0.3;
+    }
+
+    .camera-placeholder p {
+      font-size: 13px;
+      text-align: center;
+      max-width: 240px;
+    }
+
+    .controls-section {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .stat-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+    }
+
+    .stat-value {
+      font-size: 22px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      line-height: 1.2;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .stat-card.highlight .stat-value { color: var(--accent); }
+    .stat-card.warn .stat-value { color: var(--red); }
+    .stat-card.good .stat-value { color: var(--green); }
+
+    /* SETTINGS */
+    .settings-section {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .setting-row:last-child { margin-bottom: 0; }
+
+    .setting-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .setting-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .setting-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    .setting-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100px;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      background: var(--accent);
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    .range-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--text-dim);
+      min-width: 28px;
+      text-align: right;
+    }
+
+    .toggle {
+      width: 36px;
+      height: 20px;
+      background: var(--border);
+      border-radius: 10px;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+
+    .toggle.on { background: var(--accent); }
+
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      background: #fff;
+      border-radius: 50%;
+      top: 3px;
+      left: 3px;
+      transition: transform 0.2s;
+    }
+
+    .toggle.on::after { transform: translateX(16px); }
+
+    /* RIGHT PANEL */
+    .right-panel {
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 20px;
+      gap: 20px;
+    }
+
+    .panel-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+
+    .panel-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .panel-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .chart-wrap {
+      position: relative;
+      height: 140px;
+    }
+
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+
+    .history-date {
+      font-size: 12px;
+      color: var(--text-muted);
+      min-width: 110px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .history-bar {
+      flex: 1;
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .history-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: var(--red);
+    }
+
+    .history-stat {
+      font-size: 12px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      min-width: 36px;
+      text-align: right;
+    }
+
+    .history-duration {
+      font-size: 11px;
+      color: var(--text-muted);
+      min-width: 50px;
+      text-align: right;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 32px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .perm-banner {
+      background: var(--surface2);
+      border: 1px solid var(--amber);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      font-size: 12px;
+      color: var(--amber);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .perm-banner.hidden { display: none; }
+
+    .alert-pulse {
+      animation: pulse 1s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Mobile */
+    @media (max-width: 768px) {
+      .main {
+        grid-template-columns: 1fr;
+        height: auto;
+        overflow: visible;
+      }
+      .left-panel {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        overflow-y: visible;
+      }
+      .right-panel {
+        height: auto;
+      }
+      header {
+        padding: 12px 16px;
+      }
+    }
+
+    .notif-status {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 500;
+    }
+
+    .notif-status.granted { background: rgba(34,197,94,0.15); color: var(--green); }
+    .notif-status.denied { background: rgba(239,68,68,0.15); color: var(--red); }
+    .notif-status.default { background: rgba(245,158,11,0.15); color: var(--amber); }
+
+    .countdown-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      background: var(--red);
+      width: 0%;
+      transition: width 0.1s linear;
+    }
+
+    .session-active-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+      animation: pulse 1.5s ease-in-out infinite;
+      display: inline-block;
+    }
+
+    /* Flash alert overlay */
+    .flash-alert-ring {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border: 3px solid transparent;
+      border-radius: 0;
+      z-index: 10;
+      transition: none;
+    }
+
+    .flash-alert-ring.flashing {
+      animation: flashRing 0.5s ease-out forwards;
+    }
+
+    @keyframes flashRing {
+      0%   { border-color: #ef4444; box-shadow: inset 0 0 24px rgba(239,68,68,0.5); }
+      60%  { border-color: #ef4444; box-shadow: inset 0 0 24px rgba(239,68,68,0.3); }
+      100% { border-color: transparent; box-shadow: none; }
+    }
+
+    .alert-toast {
+      position: fixed;
+      top: 70px;
+      right: 20px;
+      background: rgba(239,68,68,0.95);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 10px 18px;
+      border-radius: var(--radius-sm);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+      z-index: 9999;
+      opacity: 0;
+      transform: translateY(-6px);
+      transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none;
+    }
+
+    .alert-toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Sound select */
+    select.sound-select {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 5px 8px;
+      font-family: inherit;
+      font-size: 12px;
+      outline: none;
+      cursor: pointer;
+      max-width: 110px;
+    }
+
+    select.sound-select:focus { border-color: var(--accent); }
+
+    .btn-test {
+      background: var(--surface2);
+      color: var(--text-dim);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .btn-test:hover { background: var(--border); color: var(--text); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">&#128065;</div>
+    MouthGuard
+  </div>
+  <div class="header-actions">
+    <span id="notifNote" style="font-size:11px;color:var(--text-muted)"></span>
+    <button class="btn-ghost" id="btnRequestNotif" style="display:none">Enable Alerts</button>
+    <button class="btn-primary" id="btnStart">Start Session</button>
+  </div>
+</header>
+
+<div class="main">
+  <!-- LEFT: Camera + controls -->
+  <div class="left-panel">
+    <div class="webcam-container" id="webcamContainer">
+      <div class="camera-placeholder" id="cameraPlaceholder">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+        </svg>
+        <p>Click "Start Session" to begin webcam tracking</p>
+      </div>
+      <video id="videoEl" autoplay muted playsinline style="display:none"></video>
+      <canvas id="canvasOverlay" style="display:none"></canvas>
+      <div class="status-overlay" id="statusOverlay" style="display:none">
+        <div class="mouth-badge closed" id="mouthBadge">
+          <div class="mouth-dot"></div>
+          <span id="mouthBadgeText">Closed</span>
+        </div>
+        <div class="session-timer" id="sessionTimer">00:00</div>
+      </div>
+      <div class="countdown-bar" id="countdownBar"></div>
+      <div class="flash-alert-ring" id="flashRing"></div>
+    </div>
+    <div class="alert-toast" id="alertToast">Close your mouth!</div>
+
+    <div class="controls-section">
+      <div class="section-label">Session Stats</div>
+      <div class="stats-grid">
+        <div class="stat-card good">
+          <div class="stat-value" id="statClosed">—</div>
+          <div class="stat-label">Time closed</div>
+        </div>
+        <div class="stat-card warn">
+          <div class="stat-value" id="statOpen">—</div>
+          <div class="stat-label">Time open</div>
+        </div>
+        <div class="stat-card highlight">
+          <div class="stat-value" id="statEvents">0</div>
+          <div class="stat-label">Open events</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statAvgDur">—</div>
+          <div class="stat-label">Avg open duration</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="section-label">Settings</div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-name">Sensitivity threshold</div>
+          <div class="setting-desc">Lip gap to count as "open"</div>
+        </div>
+        <div class="setting-control">
+          <input type="range" id="sliderThreshold" min="1" max="20" value="5" step="1" />
+          <span class="range-value" id="valThreshold">5</span>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-name">Alert delay</div>
+          <div class="setting-desc">Seconds before alert fires</div>
+        </div>
+        <div class="setting-control">
+          <input type="range" id="sliderDelay" min="1" max="10" value="1" step="1" />
+          <span class="range-value" id="valDelay">1s</span>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-name">Audio alerts</div>
+          <div class="setting-desc">Play a sound when alert fires</div>
+        </div>
+        <div class="setting-control">
+          <button class="btn-test" id="btnTestSound">Test</button>
+          <div class="toggle on" id="toggleAudio"></div>
+        </div>
+      </div>
+
+      <div class="setting-row" id="rowSoundType">
+        <div class="setting-info">
+          <div class="setting-name">Sound type</div>
+          <div class="setting-desc">Alert sound character</div>
+        </div>
+        <div class="setting-control">
+          <select class="sound-select" id="selectSound">
+            <option value="soft">Soft beep</option>
+            <option value="chime">Chime</option>
+            <option value="double">Double beep</option>
+            <option value="buzz">Buzz</option>
+            <option value="ping">High ping</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="setting-row" id="rowVolume">
+        <div class="setting-info">
+          <div class="setting-name">Volume</div>
+          <div class="setting-desc">Alert sound loudness</div>
+        </div>
+        <div class="setting-control">
+          <input type="range" id="sliderVolume" min="1" max="100" value="85" step="1" />
+          <span class="range-value" id="valVolume">85%</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- RIGHT: Dashboard -->
+  <div class="right-panel">
+    <div id="permBanner" class="perm-banner hidden">
+      &#9888; Camera access was denied. Please allow it in browser settings and refresh.
+    </div>
+
+    <div class="panel-card">
+      <div class="panel-card-header">
+        <span class="panel-title">Live Timeline</span>
+        <span id="liveSessionDot" style="display:none"><span class="session-active-dot"></span></span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="timelineChart"></canvas>
+      </div>
+    </div>
+
+    <div class="panel-card">
+      <div class="panel-card-header">
+        <span class="panel-title">Open / Closed Distribution</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:24px">
+        <div style="width:120px;height:120px;position:relative;flex-shrink:0">
+          <canvas id="pieChart"></canvas>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:10px;height:10px;border-radius:2px;background:var(--green);flex-shrink:0"></div>
+            <span style="font-size:12px;color:var(--text-dim)">Closed</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--green);margin-left:auto" id="pctClosed">—</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:10px;height:10px;border-radius:2px;background:var(--red);flex-shrink:0"></div>
+            <span style="font-size:12px;color:var(--text-dim)">Open</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--red);margin-left:auto" id="pctOpen">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-card">
+      <div class="panel-card-header">
+        <span class="panel-title">Session History</span>
+        <button class="btn-ghost" id="btnClearHistory" style="font-size:11px;padding:4px 10px">Clear</button>
+      </div>
+      <div id="historyList" class="history-list">
+        <div class="empty-state">No sessions recorded yet.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+const state = {
+  running: false,
+  mouthOpen: false,
+  mouthOpenSince: null,
+  lastAlertAt: 0,
+  sessionStart: null,
+  totalOpenMs: 0,
+  totalClosedMs: 0,
+  openEvents: [],
+  currentOpenStart: null,
+  lastTickAt: null,
+  timelineData: [],   // [{t, open}]
+  settings: {
+    threshold: 5,
+    alertDelay: 1000,
+    audioEnabled: true,
+    audioSound: 'soft',
+    audioVolume: 0.85,
+  }
+};
+
+// ─── DOM refs ─────────────────────────────────────────────────────────────────
+const videoEl = document.getElementById('videoEl');
+const canvasOverlay = document.getElementById('canvasOverlay');
+const ctx2d = canvasOverlay.getContext('2d');
+const btnStart = document.getElementById('btnStart');
+const btnRequestNotif = document.getElementById('btnRequestNotif');
+const mouthBadge = document.getElementById('mouthBadge');
+const mouthBadgeText = document.getElementById('mouthBadgeText');
+const statusOverlay = document.getElementById('statusOverlay');
+const cameraPlaceholder = document.getElementById('cameraPlaceholder');
+const sessionTimer = document.getElementById('sessionTimer');
+const countdownBar = document.getElementById('countdownBar');
+const permBanner = document.getElementById('permBanner');
+const liveSessionDot = document.getElementById('liveSessionDot');
+
+// Stats
+const statClosed = document.getElementById('statClosed');
+const statOpen = document.getElementById('statOpen');
+const statEvents = document.getElementById('statEvents');
+const statAvgDur = document.getElementById('statAvgDur');
+const pctClosed = document.getElementById('pctClosed');
+const pctOpen = document.getElementById('pctOpen');
+
+// Settings
+const sliderThreshold = document.getElementById('sliderThreshold');
+const sliderDelay = document.getElementById('sliderDelay');
+const sliderVolume = document.getElementById('sliderVolume');
+const toggleAudio = document.getElementById('toggleAudio');
+const selectSound = document.getElementById('selectSound');
+const valThreshold = document.getElementById('valThreshold');
+const valDelay = document.getElementById('valDelay');
+const valVolume = document.getElementById('valVolume');
+const flashRing = document.getElementById('flashRing');
+const alertToast = document.getElementById('alertToast');
+
+// ─── Settings wiring ──────────────────────────────────────────────────────────
+function loadSettings() {
+  const saved = localStorage.getItem('mouthguard_settings');
+  if (saved) {
+    Object.assign(state.settings, JSON.parse(saved));
+    sliderThreshold.value = state.settings.threshold;
+    sliderDelay.value = state.settings.alertDelay / 1000;
+    sliderVolume.value = Math.round(state.settings.audioVolume * 100);
+    selectSound.value = state.settings.audioSound;
+    if (!state.settings.audioEnabled) toggleAudio.classList.remove('on');
+  }
+  updateSettingDisplays();
+}
+
+function saveSettings() {
+  localStorage.setItem('mouthguard_settings', JSON.stringify(state.settings));
+}
+
+function updateSettingDisplays() {
+  valThreshold.textContent = state.settings.threshold;
+  valDelay.textContent = (state.settings.alertDelay / 1000) + 's';
+  valVolume.textContent = Math.round(state.settings.audioVolume * 100) + '%';
+}
+
+sliderThreshold.addEventListener('input', () => {
+  state.settings.threshold = parseInt(sliderThreshold.value);
+  updateSettingDisplays();
+  saveSettings();
+});
+
+sliderDelay.addEventListener('input', () => {
+  state.settings.alertDelay = parseInt(sliderDelay.value) * 1000;
+  updateSettingDisplays();
+  saveSettings();
+});
+
+toggleAudio.addEventListener('click', () => {
+  state.settings.audioEnabled = !state.settings.audioEnabled;
+  toggleAudio.classList.toggle('on', state.settings.audioEnabled);
+  saveSettings();
+});
+
+selectSound.addEventListener('change', () => {
+  state.settings.audioSound = selectSound.value;
+  saveSettings();
+});
+
+
+sliderVolume.addEventListener('input', () => {
+  state.settings.audioVolume = parseInt(sliderVolume.value) / 100;
+  updateSettingDisplays();
+  saveSettings();
+});
+
+document.getElementById('btnTestSound').addEventListener('click', () => {
+  // Temporarily bypass cooldown for test
+  getAudioCtx();
+  playSound(state.settings.audioSound, state.settings.audioVolume);
+});
+
+// ─── Notification permission ───────────────────────────────────────────────────
+function updateNotifStatus() {
+  const note = document.getElementById('notifNote');
+  const isFile = location.protocol === 'file:';
+  if (isFile) {
+    // file:// blocks browser notifications; tab-title blink is the background alert
+    note.textContent = 'tab blink = background alert';
+    btnRequestNotif.style.display = 'none';
+    return;
+  }
+  const perm = Notification.permission;
+  note.textContent = perm === 'granted' ? '' : '';
+  btnRequestNotif.style.display = perm === 'granted' ? 'none' : 'inline-block';
+}
+
+btnRequestNotif.addEventListener('click', async () => {
+  await Notification.requestPermission();
+  updateNotifStatus();
+});
+
+let toastTimeout = null;
+function triggerInPageAlert() {
+  // Flash the camera border
+  flashRing.classList.remove('flashing');
+  void flashRing.offsetWidth; // reflow to restart animation
+  flashRing.classList.add('flashing');
+  flashRing.addEventListener('animationend', () => flashRing.classList.remove('flashing'), { once: true });
+
+  // Show toast
+  alertToast.classList.add('show');
+  if (toastTimeout) clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => alertToast.classList.remove('show'), 2500);
+}
+
+function sendNotification() {
+  // Reset the countdown so it must fill again before firing a second time
+  state.mouthOpenSince = Date.now();
+
+  triggerInPageAlert();
+  blinkTitle();
+
+  if (Notification.permission === 'granted') {
+    try { new Notification('MouthGuard', { body: 'Close your mouth!' }); } catch(e) {}
+  }
+
+  if (state.settings.audioEnabled) {
+    playSound(state.settings.audioSound, state.settings.audioVolume);
+  }
+}
+
+// ─── Tab title blink — works on any origin including file:// ─────────────────
+let titleBlinkTimer = null;
+const originalTitle = document.title;
+
+function blinkTitle() {
+  if (titleBlinkTimer) return; // already blinking
+  let on = true;
+  titleBlinkTimer = setInterval(() => {
+    document.title = on ? '⚠ Close your mouth! — MouthGuard' : originalTitle;
+    on = !on;
+  }, 600);
+  // Stop after 6 seconds (10 flashes) — will restart next time alert fires
+  setTimeout(() => {
+    clearInterval(titleBlinkTimer);
+    titleBlinkTimer = null;
+    document.title = originalTitle;
+  }, 6000);
+}
+
+// ─── Audio engine ─────────────────────────────────────────────────────────────
+let audioCtx = null;
+
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function playSound(type, volume) {
+  try {
+    const ac = getAudioCtx();
+    const v = Math.max(0.001, Math.min(1, volume));
+
+    switch (type) {
+      case 'soft': {
+        // Gentle sine tone, short decay
+        const osc = ac.createOscillator();
+        const gain = ac.createGain();
+        osc.connect(gain); gain.connect(ac.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(660, ac.currentTime);
+        gain.gain.setValueAtTime(v, ac.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.45);
+        osc.start(ac.currentTime); osc.stop(ac.currentTime + 0.45);
+        break;
+      }
+      case 'chime': {
+        // Two harmonics, longer sustain
+        [[880, 1.0], [1320, 0.5], [1760, 0.25]].forEach(([freq, amp]) => {
+          const osc = ac.createOscillator();
+          const gain = ac.createGain();
+          osc.connect(gain); gain.connect(ac.destination);
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, ac.currentTime);
+          gain.gain.setValueAtTime(v * amp * 0.6, ac.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 1.2);
+          osc.start(ac.currentTime); osc.stop(ac.currentTime + 1.2);
+        });
+        break;
+      }
+      case 'double': {
+        // Two quick beeps
+        [0, 0.18].forEach(offset => {
+          const osc = ac.createOscillator();
+          const gain = ac.createGain();
+          osc.connect(gain); gain.connect(ac.destination);
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(800, ac.currentTime + offset);
+          gain.gain.setValueAtTime(0, ac.currentTime + offset);
+          gain.gain.linearRampToValueAtTime(v, ac.currentTime + offset + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + offset + 0.15);
+          osc.start(ac.currentTime + offset); osc.stop(ac.currentTime + offset + 0.15);
+        });
+        break;
+      }
+      case 'buzz': {
+        // Sawtooth buzz, short and punchy
+        const osc = ac.createOscillator();
+        const gain = ac.createGain();
+        osc.connect(gain); gain.connect(ac.destination);
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(180, ac.currentTime);
+        gain.gain.setValueAtTime(v * 0.4, ac.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.25);
+        osc.start(ac.currentTime); osc.stop(ac.currentTime + 0.25);
+        break;
+      }
+      case 'ping': {
+        // High-pitched short ping
+        const osc = ac.createOscillator();
+        const gain = ac.createGain();
+        osc.connect(gain); gain.connect(ac.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1400, ac.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(900, ac.currentTime + 0.2);
+        gain.gain.setValueAtTime(v * 0.8, ac.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.2);
+        osc.start(ac.currentTime); osc.stop(ac.currentTime + 0.2);
+        break;
+      }
+    }
+  } catch(e) {}
+}
+
+// ─── Charts ───────────────────────────────────────────────────────────────────
+let timelineChart, pieChart;
+
+function initCharts() {
+  const tlCtx = document.getElementById('timelineChart').getContext('2d');
+  timelineChart = new Chart(tlCtx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Mouth state',
+        data: [],
+        borderColor: '#818cf8',
+        backgroundColor: 'rgba(129,140,248,0.1)',
+        borderWidth: 2,
+        pointRadius: 0,
+        stepped: true,
+        fill: true,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: {
+        x: {
+          display: false,
+        },
+        y: {
+          min: -0.1,
+          max: 1.1,
+          ticks: {
+            stepSize: 1,
+            callback: v => v === 1 ? 'Open' : v === 0 ? 'Closed' : '',
+            color: '#6b7280',
+            font: { size: 10 }
+          },
+          grid: { color: '#2a2f3f' },
+        }
+      }
+    }
+  });
+
+  const pcCtx = document.getElementById('pieChart').getContext('2d');
+  pieChart = new Chart(pcCtx, {
+    type: 'doughnut',
+    data: {
+      datasets: [{
+        data: [1, 0],
+        backgroundColor: ['#22c55e', '#ef4444'],
+        borderWidth: 0,
+        hoverOffset: 4,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '70%',
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      animation: { duration: 300 }
+    }
+  });
+}
+
+function pushTimelinePoint(open) {
+  const t = Date.now();
+  state.timelineData.push({ t, v: open ? 1 : 0 });
+  // Keep last 5 minutes
+  const cutoff = t - 5 * 60 * 1000;
+  while (state.timelineData.length && state.timelineData[0].t < cutoff) {
+    state.timelineData.shift();
+  }
+
+  // Throttle chart update
+  if (timelineChart) {
+    const labels = state.timelineData.map(d => '');
+    const data = state.timelineData.map(d => d.v);
+    timelineChart.data.labels = labels;
+    timelineChart.data.datasets[0].data = data;
+    timelineChart.update('none');
+  }
+}
+
+function updatePieChart() {
+  const total = state.totalOpenMs + state.totalClosedMs;
+  if (total < 100 || !pieChart) return;
+  const openFrac = state.totalOpenMs / total;
+  const closedFrac = 1 - openFrac;
+  pieChart.data.datasets[0].data = [closedFrac * 100, openFrac * 100];
+  pieChart.update('none');
+
+  const op = Math.round(openFrac * 100);
+  const cl = 100 - op;
+  pctOpen.textContent = op + '%';
+  pctClosed.textContent = cl + '%';
+}
+
+// ─── Session history ───────────────────────────────────────────────────────────
+function loadHistory() {
+  return JSON.parse(localStorage.getItem('mouthguard_history') || '[]');
+}
+
+function saveSessionToHistory() {
+  const history = loadHistory();
+  const total = state.totalOpenMs + state.totalClosedMs;
+  if (total < 2000) return; // skip tiny sessions
+  const session = {
+    id: Date.now(),
+    date: new Date().toISOString(),
+    durationMs: total,
+    openMs: state.totalOpenMs,
+    openEvents: state.openEvents.length,
+  };
+  history.unshift(session);
+  if (history.length > 30) history.pop();
+  localStorage.setItem('mouthguard_history', JSON.stringify(history));
+  renderHistory();
+}
+
+function renderHistory() {
+  const history = loadHistory();
+  const list = document.getElementById('historyList');
+  if (!history.length) {
+    list.innerHTML = '<div class="empty-state">No sessions recorded yet.</div>';
+    return;
+  }
+
+  list.innerHTML = history.map(s => {
+    const date = new Date(s.date);
+    const dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+      + ' ' + date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    const total = s.durationMs || 1;
+    const pct = Math.round((s.openMs / total) * 100);
+    const dur = formatDuration(s.durationMs);
+    const color = pct > 30 ? 'var(--red)' : pct > 10 ? 'var(--amber)' : 'var(--green)';
+
+    return `
+      <div class="history-item">
+        <span class="history-date">${dateStr}</span>
+        <div class="history-bar"><div class="history-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+        <span class="history-stat" style="color:${color}">${pct}%</span>
+        <span class="history-duration">${dur}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+document.getElementById('btnClearHistory').addEventListener('click', () => {
+  localStorage.removeItem('mouthguard_history');
+  renderHistory();
+});
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function formatDuration(ms) {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  if (h > 0) return `${h}h ${m % 60}m`;
+  if (m > 0) return `${m}m ${s % 60}s`;
+  return `${s}s`;
+}
+
+function formatMs(ms) {
+  if (ms < 1000) return '0s';
+  return formatDuration(ms);
+}
+
+function updateStats() {
+  const total = state.totalOpenMs + state.totalClosedMs;
+  statClosed.textContent = total > 0 ? formatMs(state.totalClosedMs) : '—';
+  statOpen.textContent = total > 0 ? formatMs(state.totalOpenMs) : '—';
+  statEvents.textContent = state.openEvents.length;
+  if (state.openEvents.length > 0) {
+    const avg = state.openEvents.reduce((a, b) => a + b, 0) / state.openEvents.length;
+    statAvgDur.textContent = formatMs(avg);
+  } else {
+    statAvgDur.textContent = '—';
+  }
+}
+
+function updateSessionTimer() {
+  if (!state.sessionStart) return;
+  const elapsed = Date.now() - state.sessionStart;
+  const s = Math.floor(elapsed / 1000) % 60;
+  const m = Math.floor(elapsed / 60000) % 60;
+  const h = Math.floor(elapsed / 3600000);
+  if (h > 0) sessionTimer.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  else sessionTimer.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+// ─── Mouth detection callback ─────────────────────────────────────────────────
+function onFaceMeshResults(results) {
+  if (!state.running) return;
+
+  const now = Date.now();
+  const dt = state.lastTickAt ? now - state.lastTickAt : 16;
+  state.lastTickAt = now;
+
+  // Draw on canvas
+  canvasOverlay.width = videoEl.videoWidth || canvasOverlay.offsetWidth;
+  canvasOverlay.height = videoEl.videoHeight || canvasOverlay.offsetHeight;
+  ctx2d.clearRect(0, 0, canvasOverlay.width, canvasOverlay.height);
+
+  let isOpen = false;
+  let lipGap = 0;
+
+  if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+    const lm = results.multiFaceLandmarks[0];
+    const upperLip = lm[13];
+    const lowerLip = lm[14];
+
+    // Pixel-space gap
+    const W = canvasOverlay.width;
+    const H = canvasOverlay.height;
+    lipGap = Math.abs(upperLip.y - lowerLip.y) * H;
+
+    isOpen = lipGap > state.settings.threshold;
+
+    // Draw lip landmarks
+    const drawLandmark = (pt, color, r = 3) => {
+      ctx2d.beginPath();
+      ctx2d.arc((1 - pt.x) * W, pt.y * H, r, 0, Math.PI * 2);
+      ctx2d.fillStyle = color;
+      ctx2d.fill();
+    };
+
+    drawLandmark(upperLip, isOpen ? '#ef4444' : '#22c55e', 4);
+    drawLandmark(lowerLip, isOpen ? '#ef4444' : '#22c55e', 4);
+
+    // Draw gap line
+    ctx2d.beginPath();
+    ctx2d.moveTo((1 - upperLip.x) * W, upperLip.y * H);
+    ctx2d.lineTo((1 - lowerLip.x) * W, lowerLip.y * H);
+    ctx2d.strokeStyle = isOpen ? 'rgba(239,68,68,0.6)' : 'rgba(34,197,94,0.4)';
+    ctx2d.lineWidth = 2;
+    ctx2d.stroke();
+  }
+
+  // Update timings
+  if (isOpen) {
+    state.totalOpenMs += dt;
+    if (!state.mouthOpen) {
+      state.mouthOpen = true;
+      state.mouthOpenSince = now;
+      state.currentOpenStart = now;
+      pushTimelinePoint(true);
+    }
+  } else {
+    state.totalClosedMs += dt;
+    if (state.mouthOpen) {
+      state.mouthOpen = false;
+      const dur = now - state.currentOpenStart;
+      if (dur > 200) state.openEvents.push(dur);
+      state.currentOpenStart = null;
+      if (titleBlinkTimer) { clearInterval(titleBlinkTimer); titleBlinkTimer = null; document.title = originalTitle; }
+      pushTimelinePoint(false);
+    }
+  }
+
+  // Alert logic
+  if (state.mouthOpen && state.mouthOpenSince) {
+    const openDur = now - state.mouthOpenSince;
+    const frac = Math.min(openDur / state.settings.alertDelay, 1);
+    countdownBar.style.width = (frac * 100) + '%';
+    countdownBar.style.opacity = '1';
+
+    if (openDur >= state.settings.alertDelay) {
+      sendNotification();
+    }
+  } else {
+    countdownBar.style.width = '0%';
+    countdownBar.style.opacity = '0';
+  }
+
+  // Update badge
+  mouthBadge.className = 'mouth-badge ' + (isOpen ? 'open' : 'closed');
+  mouthBadgeText.textContent = isOpen ? 'Open' : 'Closed';
+
+  // Throttled UI updates
+  updateStats();
+  updatePieChart();
+  updateSessionTimer();
+}
+
+// ─── MediaPipe setup ──────────────────────────────────────────────────────────
+let faceMesh = null;
+let frameWorker = null;
+let stream = null;
+
+async function startSession() {
+  state.running = false;
+  btnStart.disabled = true;
+  btnStart.textContent = 'Starting…';
+
+  try {
+    getAudioCtx(); // init audio context from user gesture
+  stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 } });
+  } catch (e) {
+    permBanner.classList.remove('hidden');
+    btnStart.disabled = false;
+    btnStart.textContent = 'Start Session';
+    return;
+  }
+
+  videoEl.srcObject = stream;
+  await new Promise(r => videoEl.onloadedmetadata = r);
+  videoEl.play();
+
+  videoEl.style.display = 'block';
+  canvasOverlay.style.display = 'block';
+  cameraPlaceholder.style.display = 'none';
+  statusOverlay.style.display = 'flex';
+  liveSessionDot.style.display = 'inline';
+
+  // Reset session state
+  state.totalOpenMs = 0;
+  state.totalClosedMs = 0;
+  state.openEvents = [];
+  state.mouthOpen = false;
+  state.mouthOpenSince = null;
+  state.currentOpenStart = null;
+  state.lastTickAt = null;
+  state.sessionStart = Date.now();
+  state.timelineData = [];
+  if (timelineChart) {
+    timelineChart.data.labels = [];
+    timelineChart.data.datasets[0].data = [];
+    timelineChart.update('none');
+  }
+
+  // Init FaceMesh
+  faceMesh = new FaceMesh({
+    locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4/${file}`
+  });
+
+  faceMesh.setOptions({
+    maxNumFaces: 1,
+    refineLandmarks: true,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
+  });
+
+  faceMesh.onResults(onFaceMeshResults);
+
+  // Use an inline Web Worker for the tick timer — Worker setInterval is not
+  // throttled in background tabs like requestAnimationFrame / main-thread timers are.
+  const workerCode = `setInterval(() => postMessage(1), 150);`; // ~6-7 fps
+  const workerBlob = new Blob([workerCode], { type: 'application/javascript' });
+  frameWorker = new Worker(URL.createObjectURL(workerBlob));
+  let processingFrame = false;
+  frameWorker.onmessage = async () => {
+    if (!state.running || processingFrame || videoEl.readyState < 2) return;
+    processingFrame = true;
+    try { await faceMesh.send({ image: videoEl }); } catch(e) {}
+    processingFrame = false;
+  };
+
+  state.running = true;
+  btnStart.textContent = 'Stop Session';
+  btnStart.className = 'btn-danger';
+  btnStart.disabled = false;
+  btnStart.onclick = stopSession;
+}
+
+function stopSession() {
+  state.running = false;
+
+  if (frameWorker) { frameWorker.terminate(); frameWorker = null; }
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  if (faceMesh) { faceMesh.close(); faceMesh = null; }
+  if (titleBlinkTimer) { clearInterval(titleBlinkTimer); titleBlinkTimer = null; document.title = originalTitle; }
+
+  videoEl.style.display = 'none';
+  canvasOverlay.style.display = 'none';
+  cameraPlaceholder.style.display = 'flex';
+  statusOverlay.style.display = 'none';
+  liveSessionDot.style.display = 'none';
+  countdownBar.style.width = '0%';
+
+  // Close any in-progress open event
+  if (state.mouthOpen && state.currentOpenStart) {
+    const dur = Date.now() - state.currentOpenStart;
+    if (dur > 200) state.openEvents.push(dur);
+  }
+
+  saveSessionToHistory();
+  updateStats();
+
+  btnStart.textContent = 'Start Session';
+  btnStart.className = 'btn-primary';
+  btnStart.onclick = startSession;
+  btnStart.disabled = false;
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadSettings();
+  initCharts();
+  renderHistory();
+  updateNotifStatus();
+  btnStart.addEventListener('click', startSession);
+});
+</script>
+
+<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4/face_mesh.js" crossorigin="anonymous"></script>
+
+</body>
+</html>

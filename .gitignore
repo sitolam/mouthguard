@@ -1,0 +1,15 @@
+# Docker
+.docker/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code internal
+.claude/
