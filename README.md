@@ -18,10 +18,39 @@ A browser-based mouth closure tracker that uses your webcam and AI face detectio
 
 ## Quick start
 
-### Docker (recommended)
+### Docker image (recommended)
+
+Pull and run the pre-built image:
 
 ```bash
-docker compose up
+docker run -p 8080:80 ghcr.io/sitolam/mouthguard:latest
+```
+
+Pin to a specific version:
+
+```bash
+docker run -p 8080:80 ghcr.io/sitolam/mouthguard:v1.1.0
+```
+
+Or with Docker Compose — create a `docker-compose.yml`:
+
+```yaml
+services:
+  mouthguard:
+    image: ghcr.io/sitolam/mouthguard:latest
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+```
+
+```bash
+docker compose up -d
+```
+
+To update later:
+
+```bash
+docker compose pull && docker compose up -d
 ```
 
 Open [http://localhost:8080](http://localhost:8080).
