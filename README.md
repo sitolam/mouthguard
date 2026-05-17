@@ -81,7 +81,7 @@ nix-shell -p python3 --run "python3 -m http.server 8080"
 ## Tech stack
 
 - Vanilla HTML, CSS, JavaScript — single `index.html` file, no build step
-- [MediaPipe Face Mesh](https://google.github.io/mediapipe/solutions/face_mesh) via CDN — client-side ML inference
+- [MediaPipe Face Mesh](https://chuoling.github.io/mediapipe/solutions/face_mesh.html) via CDN — client-side ML inference
 - [Chart.js](https://www.chartjs.org/) via CDN — dashboard charts
 - [Nginx](https://nginx.org/) (Alpine) via Docker for serving
 
