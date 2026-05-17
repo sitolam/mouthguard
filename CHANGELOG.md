@@ -11,6 +11,37 @@ All notable changes to MouthGuard are documented here.
 - GitHub Actions workflow (`.github/workflows/docker.yml`) builds and pushes to `ghcr.io` on version tags (`v*`)
 - Image is tagged with both `:latest` and the exact tag name (e.g. `:v1.1.0`)
 
+#### Using the image
+
+**Docker run** — pull and serve on port 8080:
+```bash
+docker run -p 8080:80 ghcr.io/sitolam/mouthguard:latest
+```
+Then open http://localhost:8080 in your browser.
+
+Pin to a specific version:
+```bash
+docker run -p 8080:80 ghcr.io/sitolam/mouthguard:v1.1.0
+```
+
+**Docker Compose** — create a `docker-compose.yml` anywhere on your machine:
+```yaml
+services:
+  mouthguard:
+    image: ghcr.io/sitolam/mouthguard:latest
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+```
+Then run:
+```bash
+docker compose up -d
+```
+To update to the latest image later:
+```bash
+docker compose pull && docker compose up -d
+```
+
 ## [1.0.0] — 2026-05-17
 
 ### Initial release
