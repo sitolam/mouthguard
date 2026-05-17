@@ -683,7 +683,7 @@
           <div class="setting-desc">Seconds before alert fires</div>
         </div>
         <div class="setting-control">
-          <input type="range" id="sliderDelay" min="1" max="10" value="1" step="1" />
+          <input type="range" id="sliderDelay" min="0" max="10" value="1" step="0.1" />
           <span class="range-value" id="valDelay">1s</span>
         </div>
       </div>
@@ -737,7 +737,7 @@
 
     <div class="panel-card">
       <div class="panel-card-header">
-        <span class="panel-title">Live Timeline</span>
+        <span class="panel-title">Live Lip Gap</span>
         <span id="liveSessionDot" style="display:none"><span class="session-active-dot"></span></span>
       </div>
       <div class="chart-wrap">
@@ -858,7 +858,8 @@ function saveSettings() {
 
 function updateSettingDisplays() {
   valThreshold.textContent = state.settings.threshold;
-  valDelay.textContent = (state.settings.alertDelay / 1000) + 's';
+  const s = state.settings.alertDelay / 1000;
+  valDelay.textContent = (s === Math.floor(s) ? s.toFixed(0) : s.toFixed(1)) + 's';
   valVolume.textContent = Math.round(state.settings.audioVolume * 100) + '%';
 }
 
@@ -869,7 +870,7 @@ sliderThreshold.addEventListener('input', () => {
 });
 
 sliderDelay.addEventListener('input', () => {
-  state.settings.alertDelay = parseInt(sliderDelay.value) * 1000;
+  state.settings.alertDelay = parseFloat(sliderDelay.value) * 1000;
   updateSettingDisplays();
   saveSettings();
 });
@@ -1061,16 +1062,28 @@ function initCharts() {
     type: 'line',
     data: {
       labels: [],
-      datasets: [{
-        label: 'Mouth state',
-        data: [],
-        borderColor: '#818cf8',
-        backgroundColor: 'rgba(129,140,248,0.1)',
-        borderWidth: 2,
-        pointRadius: 0,
-        stepped: true,
-        fill: true,
-      }]
+      datasets: [
+        {
+          label: 'Lip gap',
+          data: [],
+          borderColor: '#818cf8',
+          backgroundColor: 'rgba(129,140,248,0.08)',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: true,
+          tension: 0.3,
+        },
+        {
+          label: 'Threshold',
+          data: [],
+          borderColor: '#ef4444',
+          borderWidth: 1,
+          borderDash: [4, 4],
+          pointRadius: 0,
+          fill: false,
+          tension: 0,
+        }
+      ]
     },
     options: {
       responsive: true,
@@ -1079,16 +1092,21 @@ function initCharts() {
       plugins: { legend: { display: false }, tooltip: { enabled: false } },
       scales: {
         x: {
-          display: false,
+          display: true,
+          ticks: {
+            maxTicksLimit: 7,
+            color: '#6b7280',
+            font: { size: 10 },
+          },
+          grid: { display: false },
         },
         y: {
-          min: -0.1,
-          max: 1.1,
+          min: 0,
           ticks: {
-            stepSize: 1,
-            callback: v => v === 1 ? 'Open' : v === 0 ? 'Closed' : '',
+            maxTicksLimit: 5,
+            callback: v => v + 'px',
             color: '#6b7280',
-            font: { size: 10 }
+            font: { size: 10 },
           },
           grid: { color: '#2a2f3f' },
         }
@@ -1117,23 +1135,23 @@ function initCharts() {
   });
 }
 
-function pushTimelinePoint(open) {
+function pushTimelinePoint(lipGap) {
   const t = Date.now();
-  state.timelineData.push({ t, v: open ? 1 : 0 });
-  // Keep last 5 minutes
-  const cutoff = t - 5 * 60 * 1000;
+  state.timelineData.push({ t, v: lipGap });
+  // Keep last 60 seconds
+  const cutoff = t - 60 * 1000;
   while (state.timelineData.length && state.timelineData[0].t < cutoff) {
     state.timelineData.shift();
   }
-
-  // Throttle chart update
-  if (timelineChart) {
-    const labels = state.timelineData.map(d => '');
-    const data = state.timelineData.map(d => d.v);
-    timelineChart.data.labels = labels;
-    timelineChart.data.datasets[0].data = data;
-    timelineChart.update('none');
-  }
+  if (!timelineChart) return;
+  const sessionStart = state.sessionStart || t;
+  const labels = state.timelineData.map(d => Math.round((d.t - sessionStart) / 1000) + 's');
+  const data = state.timelineData.map(d => d.v);
+  const threshold = state.settings.threshold;
+  timelineChart.data.labels = labels;
+  timelineChart.data.datasets[0].data = data;
+  timelineChart.data.datasets[1].data = data.map(() => threshold);
+  timelineChart.update('none');
 }
 
 function updatePieChart() {
@@ -1298,7 +1316,6 @@ function onFaceMeshResults(results) {
       state.mouthOpen = true;
       state.mouthOpenSince = now;
       state.currentOpenStart = now;
-      pushTimelinePoint(true);
     }
   } else {
     state.totalClosedMs += dt;
@@ -1308,14 +1325,15 @@ function onFaceMeshResults(results) {
       if (dur > 200) state.openEvents.push(dur);
       state.currentOpenStart = null;
       if (titleBlinkTimer) { clearInterval(titleBlinkTimer); titleBlinkTimer = null; document.title = originalTitle; }
-      pushTimelinePoint(false);
     }
   }
+
+  pushTimelinePoint(lipGap);
 
   // Alert logic
   if (state.mouthOpen && state.mouthOpenSince) {
     const openDur = now - state.mouthOpenSince;
-    const frac = Math.min(openDur / state.settings.alertDelay, 1);
+    const frac = state.settings.alertDelay > 0 ? Math.min(openDur / state.settings.alertDelay, 1) : 1;
     countdownBar.style.width = (frac * 100) + '%';
     countdownBar.style.opacity = '1';
 
@@ -1380,6 +1398,7 @@ async function startSession() {
   if (timelineChart) {
     timelineChart.data.labels = [];
     timelineChart.data.datasets[0].data = [];
+    timelineChart.data.datasets[1].data = [];
     timelineChart.update('none');
   }
 

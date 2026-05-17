@@ -2,6 +2,22 @@
 
 All notable changes to MouthGuard are documented here.
 
+## [1.2.0] — 2026-05-17
+
+### Improvements
+
+#### Alert delay
+- Minimum alert delay lowered from 1 s to **0 s** (fires instantly when mouth opens)
+- Step precision increased from 1 s to **0.1 s** — e.g. 0.5 s, 1.5 s, 2.3 s are all valid
+- Display value updates to one decimal place when fractional (e.g. `0.5s`, `1.2s`)
+
+#### Live Lip Gap chart (replaces Live Timeline)
+- Chart now plots the **actual lip gap in pixels** on every detection frame (~7 fps) instead of a binary open/closed step
+- X axis shows elapsed session time in seconds (`0s` → current)
+- Y axis shows gap in `px` with auto-scaling
+- A dashed red **threshold line** overlays the chart so you can see exactly how close the gap is to your alert threshold at any point
+- Rolling 60-second window (was 5 minutes of coarse data)
+
 ## [1.1.0] — 2026-05-17
 
 ### Deployment

@@ -11,7 +11,7 @@ A browser-based mouth closure tracker that uses your webcam and AI face detectio
 - **Tab title blinking** — flashes the browser tab title when your mouth has been open too long, visible even when you've switched to another tab
 - **Browser notifications** — system notifications when served over `http://localhost` or `https://`
 - **Audio alerts** — five synthesized sounds (Soft beep, Chime, Double beep, Buzz, High ping) with adjustable volume
-- **Live dashboard** — real-time timeline chart and open/closed doughnut chart
+- **Live lip gap chart** — scrolling real-time plot of the lip gap in pixels with a threshold reference line
 - **Session stats** — time open/closed, number of events, average open duration
 - **Session history** — last 30 sessions persisted to `localStorage`
 - **Dark theme** — clean, focused UI with Inter + JetBrains Mono fonts
@@ -74,7 +74,7 @@ nix-shell -p python3 --run "python3 -m http.server 8080"
 | Setting | Default | Description |
 |---|---|---|
 | Sensitivity threshold | 5 | Lip gap (px) that counts as "open". Lower = more sensitive. |
-| Alert delay | 1s | How long mouth must be open before alert fires |
+| Alert delay | 1s | How long mouth must be open before alert fires. Range: 0 – 10 s in 0.1 s steps. 0 = instant. |
 | Sound type | Soft beep | Alert sound character |
 | Volume | 85% | Alert sound loudness |
 
