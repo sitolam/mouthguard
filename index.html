@@ -770,7 +770,10 @@
 
     <div class="panel-card">
       <div class="panel-card-header">
-        <span class="panel-title">Session History</span>
+        <div>
+          <span class="panel-title">Session History</span>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px">bar &amp; % = time mouth was open</div>
+        </div>
         <button class="btn-ghost" id="btnClearHistory" style="font-size:11px;padding:4px 10px">Clear</button>
       </div>
       <div id="historyList" class="history-list">
@@ -1211,7 +1214,7 @@ function renderHistory() {
       <div class="history-item">
         <span class="history-date">${dateStr}</span>
         <div class="history-bar"><div class="history-bar-fill" style="width:${pct}%;background:${color}"></div></div>
-        <span class="history-stat" style="color:${color}">${pct}%</span>
+        <span class="history-stat" style="color:${color};min-width:52px">${pct}% open</span>
         <span class="history-duration">${dur}</span>
       </div>
     `;
@@ -1309,23 +1312,38 @@ function onFaceMeshResults(results) {
     ctx2d.stroke();
   }
 
-  // Update timings
-  if (isOpen) {
+  // Update timings using confirmed (debounced) state
+  if (state.mouthOpen) {
     state.totalOpenMs += dt;
-    if (!state.mouthOpen) {
-      state.mouthOpen = true;
-      state.mouthOpenSince = now;
-      state.currentOpenStart = now;
-    }
   } else {
     state.totalClosedMs += dt;
-    if (state.mouthOpen) {
-      state.mouthOpen = false;
-      const dur = now - state.currentOpenStart;
-      if (dur > 200) state.openEvents.push(dur);
-      state.currentOpenStart = null;
-      if (titleBlinkTimer) { clearInterval(titleBlinkTimer); titleBlinkTimer = null; document.title = originalTitle; }
+  }
+
+  // Debounced state transition — only confirm open/closed after 100ms of stable signal
+  if (isOpen !== state.mouthOpen) {
+    if (pendingMouthState !== isOpen) {
+      clearTimeout(mouthStateDebounceTimer);
+      pendingMouthState = isOpen;
+      const targetState = isOpen;
+      mouthStateDebounceTimer = setTimeout(() => {
+        pendingMouthState = null;
+        if (targetState) {
+          state.mouthOpen = true;
+          state.mouthOpenSince = Date.now();
+          state.currentOpenStart = Date.now();
+        } else {
+          state.mouthOpen = false;
+          const dur = Date.now() - state.currentOpenStart;
+          if (dur > 200) state.openEvents.push(dur);
+          state.currentOpenStart = null;
+          if (titleBlinkTimer) { clearInterval(titleBlinkTimer); titleBlinkTimer = null; document.title = originalTitle; }
+        }
+      }, 100);
     }
+  } else if (pendingMouthState !== null) {
+    // Raw signal reverted before debounce fired — cancel the pending transition
+    clearTimeout(mouthStateDebounceTimer);
+    pendingMouthState = null;
   }
 
   pushTimelinePoint(lipGap);
@@ -1359,6 +1377,8 @@ function onFaceMeshResults(results) {
 let faceMesh = null;
 let frameWorker = null;
 let stream = null;
+let mouthStateDebounceTimer = null;
+let pendingMouthState = null; // null = no pending change
 
 async function startSession() {
   state.running = false;
@@ -1443,6 +1463,9 @@ function stopSession() {
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
   if (faceMesh) { faceMesh.close(); faceMesh = null; }
   if (titleBlinkTimer) { clearInterval(titleBlinkTimer); titleBlinkTimer = null; document.title = originalTitle; }
+  clearTimeout(mouthStateDebounceTimer);
+  mouthStateDebounceTimer = null;
+  pendingMouthState = null;
 
   videoEl.style.display = 'none';
   canvasOverlay.style.display = 'none';
@@ -1472,7 +1495,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initCharts();
   renderHistory();
   updateNotifStatus();
-  btnStart.addEventListener('click', startSession);
+  btnStart.onclick = startSession;
 });
 </script>
 

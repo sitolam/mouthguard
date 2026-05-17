@@ -2,6 +2,14 @@
 
 All notable changes to MouthGuard are documented here.
 
+## [1.2.1] — 2026-05-17
+
+### Bug fixes
+
+- **Stop session button** — clicking Stop no longer immediately restarts the session. The root cause was an `addEventListener('click', startSession)` added at init that was never removed; it fired alongside the `onclick = stopSession` assignment, causing both handlers to run simultaneously. Fixed by using `onclick` exclusively.
+- **False open/closed readings** — added a 100 ms debounce before confirming a mouth state transition. The camera occasionally produces a single-frame blip that would flip state and count a bogus open event. The confirmed state now only changes if the raw signal holds steady for 100 ms; time accounting (open/closed totals) uses the confirmed state throughout.
+- **Session history clarity** — the percentage column now reads `X% open` instead of a bare `X%`, and a subtitle `bar & % = time mouth was open` has been added under the panel title, making the metric immediately clear without needing to guess.
+
 ## [1.2.0] — 2026-05-17
 
 ### Improvements
