@@ -2,6 +2,15 @@
 
 All notable changes to MouthGuard are documented here.
 
+## [1.1.0] — 2026-05-17
+
+### Deployment
+
+#### Docker
+- Added `Dockerfile` using `nginx:alpine` — bakes `index.html` directly into the image (no volume mount required)
+- GitHub Actions workflow (`.github/workflows/docker.yml`) builds and pushes to `ghcr.io` on version tags (`v*`)
+- Image is tagged with both `:latest` and the exact tag name (e.g. `:v1.1.0`)
+
 ## [1.0.0] — 2026-05-17
 
 ### Initial release
