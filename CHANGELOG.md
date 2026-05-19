@@ -2,6 +2,14 @@
 
 All notable changes to MouthGuard are documented here.
 
+## [1.2.2] — 2026-05-19
+
+### Improvements
+
+- **Alert delay is now the detection window** — the mouth must stay continuously open for the full alert delay before the system registers it as open at all. Previously a 100 ms debounce confirmed state and then the alert delay was a separate countdown on top. Now there is a single configurable window: if the mouth closes before the delay expires, nothing is recorded and no alert fires, eliminating false positives from brief openings.
+- **Detection window counted as open time** — when a mouth-open event is confirmed, the time spent in the detection window is retroactively added to the "time open" total so stats accurately reflect the full duration the mouth was open.
+- **Alert delay description updated** — the setting now reads "Mouth must stay open this long to be detected & trigger an alert" to match the new behaviour.
+
 ## [1.2.1] — 2026-05-17
 
 ### Bug fixes

@@ -680,7 +680,7 @@
       <div class="setting-row">
         <div class="setting-info">
           <div class="setting-name">Alert delay</div>
-          <div class="setting-desc">Seconds before alert fires</div>
+          <div class="setting-desc">Mouth must stay open this long to be detected &amp; trigger an alert</div>
         </div>
         <div class="setting-control">
           <input type="range" id="sliderDelay" min="0" max="10" value="1" step="0.1" />
@@ -789,6 +789,7 @@ const state = {
   running: false,
   mouthOpen: false,
   mouthOpenSince: null,
+  rawOpenSince: null,
   lastAlertAt: 0,
   sessionStart: null,
   totalOpenMs: 0,
@@ -1312,56 +1313,60 @@ function onFaceMeshResults(results) {
     ctx2d.stroke();
   }
 
-  // Update timings using confirmed (debounced) state
+  // Update timings using confirmed state
   if (state.mouthOpen) {
     state.totalOpenMs += dt;
   } else {
     state.totalClosedMs += dt;
   }
 
-  // Debounced state transition — only confirm open/closed after 100ms of stable signal
-  if (isOpen !== state.mouthOpen) {
-    if (pendingMouthState !== isOpen) {
-      clearTimeout(mouthStateDebounceTimer);
-      pendingMouthState = isOpen;
-      const targetState = isOpen;
-      mouthStateDebounceTimer = setTimeout(() => {
-        pendingMouthState = null;
-        if (targetState) {
-          state.mouthOpen = true;
-          state.mouthOpenSince = Date.now();
-          state.currentOpenStart = Date.now();
-        } else {
-          state.mouthOpen = false;
-          const dur = Date.now() - state.currentOpenStart;
-          if (dur > 200) state.openEvents.push(dur);
-          state.currentOpenStart = null;
-          if (titleBlinkTimer) { clearInterval(titleBlinkTimer); titleBlinkTimer = null; document.title = originalTitle; }
-        }
-      }, 100);
-    }
-  } else if (pendingMouthState !== null) {
-    // Raw signal reverted before debounce fired — cancel the pending transition
-    clearTimeout(mouthStateDebounceTimer);
-    pendingMouthState = null;
-  }
+  // Detection + alert — alertDelay is the full window the mouth must stay open
+  // before it is confirmed as open, the alert fires, and time is counted
+  if (isOpen) {
+    if (!state.rawOpenSince) state.rawOpenSince = now;
+    const delay = state.settings.alertDelay;
 
-  pushTimelinePoint(lipGap);
-
-  // Alert logic
-  if (state.mouthOpen && state.mouthOpenSince) {
-    const openDur = now - state.mouthOpenSince;
-    const frac = state.settings.alertDelay > 0 ? Math.min(openDur / state.settings.alertDelay, 1) : 1;
-    countdownBar.style.width = (frac * 100) + '%';
-    countdownBar.style.opacity = '1';
-
-    if (openDur >= state.settings.alertDelay) {
-      sendNotification();
+    if (!state.mouthOpen) {
+      // Filling detection countdown
+      const openDur = now - state.rawOpenSince;
+      const frac = delay > 0 ? Math.min(openDur / delay, 1) : 1;
+      countdownBar.style.width = (frac * 100) + '%';
+      countdownBar.style.opacity = '1';
+      if (openDur >= delay) {
+        // Retroactively count the detection window as open time
+        const retroMs = openDur;
+        state.totalClosedMs = Math.max(0, state.totalClosedMs - retroMs);
+        state.totalOpenMs += retroMs;
+        state.mouthOpen = true;
+        state.currentOpenStart = state.rawOpenSince;
+        state.mouthOpenSince = now;
+        sendNotification();
+      }
+    } else {
+      // Already confirmed open — re-arm countdown
+      const sinceLastAlert = now - state.mouthOpenSince;
+      const frac = delay > 0 ? Math.min(sinceLastAlert / delay, 1) : 0;
+      countdownBar.style.width = (frac * 100) + '%';
+      countdownBar.style.opacity = '1';
+      if (sinceLastAlert >= delay) {
+        sendNotification();
+      }
     }
   } else {
+    // Raw signal closed
+    if (state.mouthOpen) {
+      state.mouthOpen = false;
+      const dur = now - (state.currentOpenStart || now);
+      if (dur > 200) state.openEvents.push(dur);
+      state.currentOpenStart = null;
+      if (titleBlinkTimer) { clearInterval(titleBlinkTimer); titleBlinkTimer = null; document.title = originalTitle; }
+    }
+    state.rawOpenSince = null;
     countdownBar.style.width = '0%';
     countdownBar.style.opacity = '0';
   }
+
+  pushTimelinePoint(lipGap);
 
   // Update badge
   mouthBadge.className = 'mouth-badge ' + (isOpen ? 'open' : 'closed');
@@ -1377,8 +1382,6 @@ function onFaceMeshResults(results) {
 let faceMesh = null;
 let frameWorker = null;
 let stream = null;
-let mouthStateDebounceTimer = null;
-let pendingMouthState = null; // null = no pending change
 
 async function startSession() {
   state.running = false;
@@ -1411,6 +1414,7 @@ async function startSession() {
   state.openEvents = [];
   state.mouthOpen = false;
   state.mouthOpenSince = null;
+  state.rawOpenSince = null;
   state.currentOpenStart = null;
   state.lastTickAt = null;
   state.sessionStart = Date.now();
@@ -1463,9 +1467,6 @@ function stopSession() {
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
   if (faceMesh) { faceMesh.close(); faceMesh = null; }
   if (titleBlinkTimer) { clearInterval(titleBlinkTimer); titleBlinkTimer = null; document.title = originalTitle; }
-  clearTimeout(mouthStateDebounceTimer);
-  mouthStateDebounceTimer = null;
-  pendingMouthState = null;
 
   videoEl.style.display = 'none';
   canvasOverlay.style.display = 'none';
