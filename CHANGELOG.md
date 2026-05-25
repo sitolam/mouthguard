@@ -2,6 +2,15 @@
 
 All notable changes to MouthGuard are documented here.
 
+## [1.3.0] — 2026-05-25
+
+### New features
+
+#### Distance compensation
+- **Distance compensation toggle** — when enabled, the raw lip gap is normalised by face height (forehead landmark 10 → chin landmark 152) and scaled to a reference face size before being compared to the threshold. This keeps sensitivity consistent regardless of how far you sit from the camera; toggling it off restores the previous pixel-gap behaviour. Persisted to `localStorage`.
+- **Calibrate button** — sit at your preferred distance, start a session, and click Calibrate to capture the current face height as the reference. The reference is shown in the setting row and persisted across page reloads. Button briefly confirms with `✓ Set (NNNpx)` on success, or `No face detected` if no face is visible.
+- **Dashboard distance readout** — three small readings appear below the Live Lip Gap chart (hidden when compensation is off): **Face size** (current face height in px), **Ref size** (the saved calibration reference), and **Adj. gap** (the compensated gap value being compared to the threshold). The Live Lip Gap chart plots the adjusted gap when compensation is active so the threshold line stays meaningful.
+
 ## [1.2.2] — 2026-05-19
 
 ### Improvements

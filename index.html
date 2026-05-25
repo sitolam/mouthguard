@@ -588,6 +588,32 @@
 
     select.sound-select:focus { border-color: var(--accent); }
 
+    .dist-readout {
+      display: flex;
+      gap: 20px;
+      padding: 8px 12px 6px;
+      border-top: 1px solid var(--border);
+      margin-top: 4px;
+    }
+    .dist-stat {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .dist-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .dist-value {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+
     .btn-test {
       background: var(--surface2);
       color: var(--text-dim);
@@ -669,7 +695,7 @@
       <div class="setting-row">
         <div class="setting-info">
           <div class="setting-name">Sensitivity threshold</div>
-          <div class="setting-desc">Lip gap to count as "open"</div>
+          <div class="setting-desc">Lip gap (px) to count as "open" — at reference distance when compensation is on</div>
         </div>
         <div class="setting-control">
           <input type="range" id="sliderThreshold" min="1" max="20" value="5" step="1" />
@@ -726,6 +752,26 @@
         </div>
       </div>
 
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-name">Distance compensation</div>
+          <div class="setting-desc">Scales sensitivity with camera distance using face size</div>
+        </div>
+        <div class="setting-control">
+          <div class="toggle on" id="toggleDistComp"></div>
+        </div>
+      </div>
+
+      <div class="setting-row" id="rowCalibrate" style="display:none">
+        <div class="setting-info">
+          <div class="setting-name">Reference distance</div>
+          <div class="setting-desc">Sit at your preferred distance, then calibrate — current ref: <span id="distRefVal">200</span>px</div>
+        </div>
+        <div class="setting-control">
+          <button class="btn-test" id="btnCalibrate">Calibrate</button>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -742,6 +788,20 @@
       </div>
       <div class="chart-wrap">
         <canvas id="timelineChart"></canvas>
+      </div>
+      <div id="distReadout" class="dist-readout" style="display:none">
+        <div class="dist-stat">
+          <span class="dist-label">Face size</span>
+          <span class="dist-value" id="distFaceSize">—</span>
+        </div>
+        <div class="dist-stat">
+          <span class="dist-label">Ref size</span>
+          <span class="dist-value" id="distRefSize">—</span>
+        </div>
+        <div class="dist-stat">
+          <span class="dist-label">Adj. gap</span>
+          <span class="dist-value" id="distCompGap">—</span>
+        </div>
       </div>
     </div>
 
@@ -798,12 +858,16 @@ const state = {
   currentOpenStart: null,
   lastTickAt: null,
   timelineData: [],   // [{t, open}]
+  faceHeight: 0,
+  compGap: 0,
   settings: {
     threshold: 5,
     alertDelay: 1000,
     audioEnabled: true,
     audioSound: 'soft',
     audioVolume: 0.85,
+    distComp: true,
+    distRef: 200,
   }
 };
 
@@ -841,6 +905,14 @@ const valDelay = document.getElementById('valDelay');
 const valVolume = document.getElementById('valVolume');
 const flashRing = document.getElementById('flashRing');
 const alertToast = document.getElementById('alertToast');
+const toggleDistComp = document.getElementById('toggleDistComp');
+const distReadout = document.getElementById('distReadout');
+const distFaceSize = document.getElementById('distFaceSize');
+const distRefSizeEl = document.getElementById('distRefSize');
+const distCompGap = document.getElementById('distCompGap');
+const rowCalibrate = document.getElementById('rowCalibrate');
+const btnCalibrate = document.getElementById('btnCalibrate');
+const distRefVal = document.getElementById('distRefVal');
 
 // ─── Settings wiring ──────────────────────────────────────────────────────────
 function loadSettings() {
@@ -852,6 +924,7 @@ function loadSettings() {
     sliderVolume.value = Math.round(state.settings.audioVolume * 100);
     selectSound.value = state.settings.audioSound;
     if (!state.settings.audioEnabled) toggleAudio.classList.remove('on');
+    toggleDistComp.classList.toggle('on', state.settings.distComp);
   }
   updateSettingDisplays();
 }
@@ -865,6 +938,10 @@ function updateSettingDisplays() {
   const s = state.settings.alertDelay / 1000;
   valDelay.textContent = (s === Math.floor(s) ? s.toFixed(0) : s.toFixed(1)) + 's';
   valVolume.textContent = Math.round(state.settings.audioVolume * 100) + '%';
+  distReadout.style.display = state.settings.distComp ? '' : 'none';
+  rowCalibrate.style.display = state.settings.distComp ? '' : 'none';
+  distRefVal.textContent = state.settings.distRef;
+  distRefSizeEl.textContent = state.settings.distRef + 'px';
 }
 
 sliderThreshold.addEventListener('input', () => {
@@ -895,6 +972,26 @@ sliderVolume.addEventListener('input', () => {
   state.settings.audioVolume = parseInt(sliderVolume.value) / 100;
   updateSettingDisplays();
   saveSettings();
+});
+
+toggleDistComp.addEventListener('click', () => {
+  state.settings.distComp = !state.settings.distComp;
+  toggleDistComp.classList.toggle('on', state.settings.distComp);
+  updateSettingDisplays();
+  saveSettings();
+});
+
+btnCalibrate.addEventListener('click', () => {
+  if (!state.running || state.faceHeight < 20) {
+    btnCalibrate.textContent = 'No face detected';
+    setTimeout(() => { btnCalibrate.textContent = 'Calibrate'; }, 1500);
+    return;
+  }
+  state.settings.distRef = Math.round(state.faceHeight);
+  distRefVal.textContent = state.settings.distRef;
+  saveSettings();
+  btnCalibrate.textContent = '✓ Set (' + state.settings.distRef + 'px)';
+  setTimeout(() => { btnCalibrate.textContent = 'Calibrate'; }, 2000);
 });
 
 document.getElementById('btnTestSound').addEventListener('click', () => {
@@ -1265,6 +1362,15 @@ function updateSessionTimer() {
   else sessionTimer.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
+// ─── Distance readout ─────────────────────────────────────────────────────────
+function updateDistReadout() {
+  if (!state.settings.distComp) return;
+  const fh = state.faceHeight;
+  distFaceSize.textContent = fh > 0 ? Math.round(fh) + 'px' : '—';
+  distRefSizeEl.textContent = state.settings.distRef + 'px';
+  distCompGap.textContent = fh > 0 ? state.compGap.toFixed(1) + 'px' : '—';
+}
+
 // ─── Mouth detection callback ─────────────────────────────────────────────────
 function onFaceMeshResults(results) {
   if (!state.running) return;
@@ -1280,6 +1386,7 @@ function onFaceMeshResults(results) {
 
   let isOpen = false;
   let lipGap = 0;
+  let effectiveGap = 0;
 
   if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
     const lm = results.multiFaceLandmarks[0];
@@ -1291,7 +1398,16 @@ function onFaceMeshResults(results) {
     const H = canvasOverlay.height;
     lipGap = Math.abs(upperLip.y - lowerLip.y) * H;
 
-    isOpen = lipGap > state.settings.threshold;
+    // Distance compensation: normalize lip gap by face height (lm[10]=forehead, lm[152]=chin)
+    // 200px is the reference face height at a "normal" camera distance
+    const faceH = Math.abs(lm[10].y - lm[152].y) * H;
+    state.faceHeight = faceH;
+    effectiveGap = (state.settings.distComp && faceH > 20)
+      ? lipGap / faceH * state.settings.distRef
+      : lipGap;
+    state.compGap = effectiveGap;
+
+    isOpen = effectiveGap > state.settings.threshold;
 
     // Draw lip landmarks
     const drawLandmark = (pt, color, r = 3) => {
@@ -1366,7 +1482,8 @@ function onFaceMeshResults(results) {
     countdownBar.style.opacity = '0';
   }
 
-  pushTimelinePoint(lipGap);
+  pushTimelinePoint(effectiveGap);
+  updateDistReadout();
 
   // Update badge
   mouthBadge.className = 'mouth-badge ' + (isOpen ? 'open' : 'closed');
@@ -1419,6 +1536,8 @@ async function startSession() {
   state.lastTickAt = null;
   state.sessionStart = Date.now();
   state.timelineData = [];
+  state.faceHeight = 0;
+  state.compGap = 0;
   if (timelineChart) {
     timelineChart.data.labels = [];
     timelineChart.data.datasets[0].data = [];
@@ -1480,6 +1599,12 @@ function stopSession() {
     const dur = Date.now() - state.currentOpenStart;
     if (dur > 200) state.openEvents.push(dur);
   }
+
+  state.faceHeight = 0;
+  state.compGap = 0;
+  distFaceSize.textContent = '—';
+  distRefSizeEl.textContent = state.settings.distRef + 'px';
+  distCompGap.textContent = '—';
 
   saveSessionToHistory();
   updateStats();
