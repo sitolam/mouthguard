@@ -2,6 +2,13 @@
 
 All notable changes to MouthGuard are documented here.
 
+## [1.3.1] — 2026-05-25
+
+### Improvements
+
+- **Distance compensation algorithm optimised** — normalization reference changed from forehead-to-chin (lm[10]→lm[152]) to nose-to-chin (lm[1]→lm[152]). The forehead landmark nears the frame edge at close distances, causing an artificially small face height reading and under-compensation (closer still felt more sensitive). Nose-to-chin is always fully in frame, local to the mouth region, and measured with `Math.hypot` to handle mild head tilt. Reference constant updated to 100 px to match the shorter measurement.
+- **Calibrate button removed** — the fixed 100 px reference works without per-session calibration. `distRef` removed from persisted settings so stale localStorage values can no longer override it.
+
 ## [1.3.0] — 2026-05-25
 
 ### New features

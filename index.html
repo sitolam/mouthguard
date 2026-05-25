@@ -762,15 +762,7 @@
         </div>
       </div>
 
-      <div class="setting-row" id="rowCalibrate" style="display:none">
-        <div class="setting-info">
-          <div class="setting-name">Reference distance</div>
-          <div class="setting-desc">Sit at your preferred distance, then calibrate — current ref: <span id="distRefVal">200</span>px</div>
-        </div>
-        <div class="setting-control">
-          <button class="btn-test" id="btnCalibrate">Calibrate</button>
-        </div>
-      </div>
+
 
     </div>
   </div>
@@ -795,7 +787,7 @@
           <span class="dist-value" id="distFaceSize">—</span>
         </div>
         <div class="dist-stat">
-          <span class="dist-label">Ref size</span>
+          <span class="dist-label">Ref mouth</span>
           <span class="dist-value" id="distRefSize">—</span>
         </div>
         <div class="dist-stat">
@@ -867,7 +859,6 @@ const state = {
     audioSound: 'soft',
     audioVolume: 0.85,
     distComp: true,
-    distRef: 200,
   }
 };
 
@@ -910,9 +901,7 @@ const distReadout = document.getElementById('distReadout');
 const distFaceSize = document.getElementById('distFaceSize');
 const distRefSizeEl = document.getElementById('distRefSize');
 const distCompGap = document.getElementById('distCompGap');
-const rowCalibrate = document.getElementById('rowCalibrate');
-const btnCalibrate = document.getElementById('btnCalibrate');
-const distRefVal = document.getElementById('distRefVal');
+
 
 // ─── Settings wiring ──────────────────────────────────────────────────────────
 function loadSettings() {
@@ -939,9 +928,7 @@ function updateSettingDisplays() {
   valDelay.textContent = (s === Math.floor(s) ? s.toFixed(0) : s.toFixed(1)) + 's';
   valVolume.textContent = Math.round(state.settings.audioVolume * 100) + '%';
   distReadout.style.display = state.settings.distComp ? '' : 'none';
-  rowCalibrate.style.display = state.settings.distComp ? '' : 'none';
-  distRefVal.textContent = state.settings.distRef;
-  distRefSizeEl.textContent = state.settings.distRef + 'px';
+  distRefSizeEl.textContent = DIST_REF + 'px';
 }
 
 sliderThreshold.addEventListener('input', () => {
@@ -981,18 +968,6 @@ toggleDistComp.addEventListener('click', () => {
   saveSettings();
 });
 
-btnCalibrate.addEventListener('click', () => {
-  if (!state.running || state.faceHeight < 20) {
-    btnCalibrate.textContent = 'No face detected';
-    setTimeout(() => { btnCalibrate.textContent = 'Calibrate'; }, 1500);
-    return;
-  }
-  state.settings.distRef = Math.round(state.faceHeight);
-  distRefVal.textContent = state.settings.distRef;
-  saveSettings();
-  btnCalibrate.textContent = '✓ Set (' + state.settings.distRef + 'px)';
-  setTimeout(() => { btnCalibrate.textContent = 'Calibrate'; }, 2000);
-});
 
 document.getElementById('btnTestSound').addEventListener('click', () => {
   // Temporarily bypass cooldown for test
@@ -1363,11 +1338,13 @@ function updateSessionTimer() {
 }
 
 // ─── Distance readout ─────────────────────────────────────────────────────────
+const DIST_REF = 100; // nose-to-chin px at reference distance
+
 function updateDistReadout() {
   if (!state.settings.distComp) return;
   const fh = state.faceHeight;
-  distFaceSize.textContent = fh > 0 ? Math.round(fh) + 'px' : '—';
-  distRefSizeEl.textContent = state.settings.distRef + 'px';
+  distFaceSize.textContent = state.faceHeight > 0 ? Math.round(state.faceHeight) + 'px' : '—';
+  distRefSizeEl.textContent = DIST_REF + 'px';
   distCompGap.textContent = fh > 0 ? state.compGap.toFixed(1) + 'px' : '—';
 }
 
@@ -1398,12 +1375,14 @@ function onFaceMeshResults(results) {
     const H = canvasOverlay.height;
     lipGap = Math.abs(upperLip.y - lowerLip.y) * H;
 
-    // Distance compensation: normalize lip gap by face height (lm[10]=forehead, lm[152]=chin)
-    // 200px is the reference face height at a "normal" camera distance
-    const faceH = Math.abs(lm[10].y - lm[152].y) * H;
+    // Distance compensation: normalize lip gap by nose-to-chin distance (lm[1]→lm[152]).
+    // Using lm[10] (forehead) unreliable — it nears the frame edge when close to camera,
+    // causing faceH to read artificially small and over-compensate. Nose-to-chin is always
+    // fully visible and local to the mouth region. Math.hypot handles mild head tilt.
+    const faceH = Math.hypot((lm[1].x - lm[152].x) * W, (lm[1].y - lm[152].y) * H);
     state.faceHeight = faceH;
-    effectiveGap = (state.settings.distComp && faceH > 20)
-      ? lipGap / faceH * state.settings.distRef
+    effectiveGap = (state.settings.distComp && faceH > 10)
+      ? lipGap / faceH * DIST_REF
       : lipGap;
     state.compGap = effectiveGap;
 
@@ -1537,6 +1516,7 @@ async function startSession() {
   state.sessionStart = Date.now();
   state.timelineData = [];
   state.faceHeight = 0;
+
   state.compGap = 0;
   if (timelineChart) {
     timelineChart.data.labels = [];
@@ -1601,9 +1581,10 @@ function stopSession() {
   }
 
   state.faceHeight = 0;
+
   state.compGap = 0;
   distFaceSize.textContent = '—';
-  distRefSizeEl.textContent = state.settings.distRef + 'px';
+  distRefSizeEl.textContent = DIST_REF + 'px';
   distCompGap.textContent = '—';
 
   saveSessionToHistory();
